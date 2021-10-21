@@ -7,11 +7,12 @@ from scapy.all import *
 import os
 from datetime import datetime
 import time
+import pickle
 from scapy.layers.inet import IP, TCP, UDP
 from scapy.sendrecv import sniff
 from scapy.utils import wrpcap
 from library.FlowRecoder import get_data, gen_json
-
+warnings.filterwarnings("ignore")
 
 class AnomalyDetectionSimulator(object):
 
@@ -29,6 +30,17 @@ class AnomalyDetectionSimulator(object):
         self.sleep_sec = 0.5
         self.check_packets_interval = 2
         self.c_stime = (0, 0)
+        self.knn_model = self.load_model()
+        self.normal_traffic_count = 0
+        self.ddos_traffic_count = 0
+    def load_model(self):
+        model = None
+        try:
+            model = pickle.load(open('model/knn-network.pkl', 'rb'))
+            return model
+        except FileNotFoundError:
+            print("Model File not Found!: ")
+
     def _get_fid(self, pkt):
         """Extract fid (five-tuple) from a packet: only focus on IPv4
         Parameters
@@ -119,35 +131,77 @@ class AnomalyDetectionSimulator(object):
         """
                 Parameters
                 ----------
-                Te
+                get_data = convert pcap to much more readable
+                get_json = get the readable packets then convert it to array  for predicction
 
         """
         start_capture_time = datetime.now()
-        captured_buffer = []
 
-        # for pkt in sniff(iface=conf.iface, count=50):
-        #     captured_buffer.append(pkt)
-        # data = get_data(captured_buffer)
-        # data = gen_json(data)
-        # print(data)
+
         while self.seconds_pass < self.DURATION:
             self.c_stime = ((self.seconds_pass//60)+10, self.seconds_pass%60)
             print(str(self.c_stime[0])+":"+str(self.c_stime[1]))
+            data = []
+            message = ""
             if self.ctr == self.check_packets_interval:
-                #stime_raw = (c_stime[0]*60)+c_stime[1]
-                print("Check packets called")
-                for pkt in sniff(iface=conf.iface, count=5):
-                    captured_buffer.append(pkt)
-                data = get_data(captured_buffer)
-                data = gen_json(data)
-                print(data)
+                try:
+                    captured_buffer = []
+                    for pkt in sniff(iface=conf.iface, count=5):
+                        captured_buffer.append(pkt)
+                    data = get_data(captured_buffer)
+                    data = gen_json(data)
+                except Warning:
+                    print("Theres something wrong...")
                 self.ctr = 0
+            if self.has_activity(data):
+                message = self.prediction(data)
+            print(message)
             self.ctr += 1
             self.seconds_pass += 1
             time.sleep(self.sleep_sec)
+            os.system('cls')
+        return self.normal_traffic_count, self.ddos_traffic_count
+
+    def has_activity(self, pkt):
+        if len(pkt) > 0:
+            return True
+        else:
+            return False
+    def prediction(self,packets_array):
+        data = packets_array
+        try:
+            prediction_packets = self.knn_model.predict(data)
+            sum_outlayers = 0
+            sum_inlayers = 0
+
+            for pred in prediction_packets:
+                if pred == 0:
+                    sum_outlayers += 1
+                elif pred == 1:
+                    sum_inlayers += 1
+            if sum_outlayers > sum_inlayers:
+                self.ddos_traffic_count += 1
+                return "DDOS Attacked Detected!"
+
+
+            elif sum_outlayers == sum_inlayers:
+                return "Warning! 50% chance of attack will happen"
+
+            else:
+                self.normal_traffic_count += 1
+                return "No Incoming Attack Detected"
+
+        except ValueError:
+            print("Input incorrect parameters...")
+
+
+
+
 
 
 if __name__ == '__main__':
-    app = AnomalyDetectionSimulator(duration=30)
+    app = AnomalyDetectionSimulator(duration=60) # duration in seconds
     #app.gether_datasets(filename="normal")
-    app.capture()
+    normal_traffic_cnt, ddos_traffic_cnt = app.capture()
+    print("Normal Traffic Count Detected: {0}".format(normal_traffic_cnt))
+    print("DDOS Traffic Count Detected: {0}".format(ddos_traffic_cnt))

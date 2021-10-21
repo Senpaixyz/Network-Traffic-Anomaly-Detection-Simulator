@@ -7,6 +7,7 @@ from library.tcp_stream import TCPStream
 import argparse
 from library.entropy import kolmogorov, shannon
 
+
 attrs = ['src','sport','dst',
          'dport','proto','push_flag_ratio',
          'average_len','average_payload_len',
@@ -31,25 +32,43 @@ def create_flow_keys(pkt):
     return create_forward_flow_key(pkt),create_reverse_flow_key(pkt)
 
 def gen_json(flows):
-    result = dict()
-    index = 1
+    packets_data = []
     for flow in flows.values():
-        data = dict()
-        data['proto_name']              = proto_name(flow.sport,flow.dport)
-        data['src']                     = flow.src
-        data['sport']                   = flow.sport
-        data['dst']                     = flow.dst
-        data['dport']                   = flow.dport
-        data['proto']                   = flow.proto
-        data['push_flag_ratio']         = round(flow.push_flag_ratio(),2)
-        data['avrg_len']                = round(flow.avrg_len(),2)
-        data['avrg_payload_len']        = round(flow.avrg_payload_len(),2)
-        data['pkt_count']               = flow.pkt_count
-        data['avrg_inter_arrival_time'] = flow.avrg_inter_arrival_time()
+        each_packet = []
+        if proto_name(flow.sport, flow.dport) == "None":
+            each_packet.append(0)
+        elif proto_name(flow.sport, flow.dport) == "http":
+            each_packet.append(1)
 
-        result[index] = data
-        index += 1
-    return json.dumps(result, indent=4, sort_keys=False)
+        each_packet.append(flow.sport)
+        each_packet.append(flow.dport)
+        each_packet.append(flow.proto)
+        each_packet.append(round(flow.push_flag_ratio(),2))
+        each_packet.append(round(flow.avrg_len(),2))
+        each_packet.append(round(flow.avrg_payload_len(),2))
+        each_packet.append(flow.pkt_count)
+        each_packet.append(flow.avrg_inter_arrival_time())
+        packets_data.append(each_packet)
+    return packets_data
+    #result = dict()
+    #index = 1
+    # for flow in flows.values():
+    #     data = dict()
+    #     data['proto_name']              = proto_name(flow.sport,flow.dport)
+    #     data['src']                     = flow.src
+    #     data['sport']                   = flow.sport
+    #     data['dst']                     = flow.dst
+    #     data['dport']                   = flow.dport
+    #     data['proto']                   = flow.proto
+    #     data['push_flag_ratio']         = round(flow.push_flag_ratio(),2)
+    #     data['avrg_len']                = round(flow.avrg_len(),2)
+    #     data['avrg_payload_len']        = round(flow.avrg_payload_len(),2)
+    #     data['pkt_count']               = flow.pkt_count
+    #     data['avrg_inter_arrival_time'] = flow.avrg_inter_arrival_time()
+    #
+    #     result[index] = data
+    #     index += 1
+    # return json.dumps(result, indent=4, sort_keys=False)
     
 def get_data(path):
     packets = path
@@ -71,4 +90,6 @@ def get_data(path):
         else:
             tcp_stream.add(pkt[IP])
         flows[flow_key] = tcp_stream
+
     return flows
+
