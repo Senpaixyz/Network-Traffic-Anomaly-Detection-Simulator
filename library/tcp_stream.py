@@ -14,7 +14,7 @@ class TCPStream:
         self.inter_arrival_times = [0]
         self.pkt_count = 1
         self.len = pkt.len
-        self.payload = str(pkt[TCP].payload)
+        self.payload = bytes(pkt[TCP].payload)
         self.pkt = pkt
     def unique_flags(self):
         seen = set()
@@ -35,7 +35,7 @@ class TCPStream:
         self.len += pkt.len
         self.inter_arrival_times.append(pkt.time - self.time)
         self.flags.append(pkt.sprintf("%TCP.flags%"))
-        self.payload += str(pkt[TCP].payload)
+        self.payload += bytes(pkt[TCP].payload)
         self.pkt = pkt
     def remove(self,pkt):
         raise Exception('Not Implemented')

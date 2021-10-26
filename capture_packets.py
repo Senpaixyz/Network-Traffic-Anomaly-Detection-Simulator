@@ -7,12 +7,11 @@ from scapy.all import *
 import os
 from datetime import datetime
 import time
-import pickle
+from joblib import load
 from scapy.layers.inet import IP, TCP, UDP
 from scapy.sendrecv import sniff
 from scapy.utils import wrpcap
 from library.FlowRecoder import get_data, gen_json
-warnings.filterwarnings("ignore")
 
 class AnomalyDetectionSimulator(object):
 
@@ -28,104 +27,19 @@ class AnomalyDetectionSimulator(object):
         self.DURATION = duration
         self.seconds_pass = 0
         self.sleep_sec = 0.5
-        self.check_packets_interval = 2
+        self.check_packets_interval = 5# every 5s the system check array of packets
         self.c_stime = (0, 0)
         self.knn_model = self.load_model()
-        self.normal_traffic_count = 0
-        self.ddos_traffic_count = 0
+        self.captured_buffer = []
+        self.packets_percentage = []
     def load_model(self):
         model = None
         try:
-            model = pickle.load(open('model/knn-network.pkl', 'rb'))
+            model = load('model/clf.joblib')
             return model
         except FileNotFoundError:
-            print("Model File not Found!: ")
-
-    def _get_fid(self, pkt):
-        """Extract fid (five-tuple) from a packet: only focus on IPv4
-        Parameters
-        ----------
-        Returns
-        -------
-            fid: five-tuple
-        """
-
-        if IP in pkt and TCP in pkt:
-            flow_type = 'TCP'
-            fid = (pkt[IP].src, pkt[IP].dst, pkt[TCP].sport, pkt[TCP].dport, 6)
-        elif IP in pkt and UDP in pkt:
-            flow_type = 'UDP'
-            fid = (pkt[IP].src, pkt[IP].dst, pkt[UDP].sport, pkt[UDP].dport, 17)
-        else:
-            fid = ('', '', -1, -1, -1)
-
-        return fid
-
-    def set_filename_n(self, output_str):
-        sanitize = output_str.replace(':', '-')
-        sanitize = sanitize.replace('.', '-')
-        sanitize_str = sanitize.replace(' ', '_')
-        new_filename = sanitize_str
-        return new_filename
-
-    def gather_datasets(self,filename="normal"):
-        """
-        Parameters
-        ----------
-        iface: str
-            netcard interface
-        out_file: file name
-            store all captured packets to out_file
-        Returns
-        -------
-        out_file:
-        """
-        start_capture_time = datetime.now()
-        filename_tmp = 'packets/{0}-{1}.pcap'.format(filename, start_capture_time)
-        out_file = self.set_filename_n(filename_tmp)
-        print(f'\ncapture starts at {start_capture_time}...')
-        if os.path.exists(out_file):
-            os.remove(out_file)
-
-        for pkt in sniff(iface=self.interface, count=200):
-            self.pkt_buffer.append(pkt)
-            self.pkt_time = pkt.time
-            if len([fid for fid in self.flows.keys() if self.srcIP == fid[0]]) > 1000:  # number of flows
-                wrpcap(out_file, self.pkt_buffer, append=True)  # appends packet to output file
-                pkt_buffer = []
-                break
-            fid = self._get_fid(pkt)
-
-            if fid not in self.flow_buffer.keys():
-                pre_pkt_time = self.pkt_time
-                start_time = self.pkt_time
-                self.flow_buffer[fid] = (1, start_time, pre_pkt_time)
-            else:
-                pre_pkt_time = self.flow_buffer[fid][2]
-                if self.pkt_time - pre_pkt_time < self.TIMEOUT:  # 10mins = 10*60s
-                    self.flows[fid] = self.flow_buffer[fid]
-                    del self.flow_buffer[fid]  # pop out from the buffer
-                    self.flow_buffer[fid] = (1, self.pkt_time, self.pkt_time)
-                else:
-                    self.flow_buffer[fid] = (self.flow_buffer[fid][0] + 1, start_time, self.pkt_time)
-
-                # check flow_buffer and try to reduce its size
-                for k in self.flow_buffer.keys():
-                    pkt_cnt, pkt_start_time, pre_pkt_time = self.flow_buffer[k]
-                    if pre_pkt_time - pkt_start_time > 60 * 60:  # 1 hour
-                        self.flows[fid] = self.flow_buffer[fid]
-                        del self.flow_buffer[fid]  # pop out from the buffer
-
-            if len(self.pkt_buffer) > 10000:  # buffer size of packets
-                wrpcap(out_file, self.pkt_buffer, append=True)  # appends packet to output file
-                self.pkt_buffer = []
-        wrpcap(out_file, self.pkt_buffer, append=True)  # appends packet to output file
-        print(f'out_file: {os.path.abspath(out_file)}')
-
-        end_capture_time = datetime.now()
-        total_time = (end_capture_time - start_capture_time).total_seconds()
-        print(f'capture finished at {end_capture_time}, and the total time is {total_time} s')
-
+            print("Model File not Found!")
+            sys.exit()
 
     def capture(self):
         """
@@ -135,62 +49,66 @@ class AnomalyDetectionSimulator(object):
                 get_json = get the readable packets then convert it to array  for predicction
 
         """
-        start_capture_time = datetime.now()
-
 
         while self.seconds_pass < self.DURATION:
             self.c_stime = ((self.seconds_pass//60)+10, self.seconds_pass%60)
             print(str(self.c_stime[0])+":"+str(self.c_stime[1]))
-            data = []
             message = ""
+            for pkt in sniff(iface=conf.iface, count=20):
+                self.captured_buffer.append(pkt)
+            data = get_data(self.captured_buffer)
+            data = gen_json(data)
+
+            #print("JSON: ", data)
             if self.ctr == self.check_packets_interval:
-                try:
-                    captured_buffer = []
-                    for pkt in sniff(iface=conf.iface, count=5):
-                        captured_buffer.append(pkt)
-                    data = get_data(captured_buffer)
-                    data = gen_json(data)
-                except Warning:
-                    print("Theres something wrong...")
+                #print("DATA: ", data)
+                print("CHECKIING PACKETS... ")
+                self.prediction(data)
                 self.ctr = 0
-            if self.has_activity(data):
-                message = self.prediction(data)
-            print(message)
             self.ctr += 1
             self.seconds_pass += 1
             time.sleep(self.sleep_sec)
-            os.system('cls')
-        return self.normal_traffic_count, self.ddos_traffic_count
-
+            #os.system('cls')
+        return self.packets_percentage
     def has_activity(self, pkt):
         if len(pkt) > 0:
             return True
         else:
             return False
     def prediction(self,packets_array):
+        """ Anomaly from the previous packets flows """
         data = packets_array
+        start_capture_time = datetime.now()
         try:
             prediction_packets = self.knn_model.predict(data)
-            sum_outlayers = 0
-            sum_inlayers = 0
+            print("PREDICTION: ", prediction_packets)
+            alert = 0
+            totalAlert = len(prediction_packets)
+            prev = None
+            nxt = None
+            for i in range(0, len(prediction_packets)):
+                if prediction_packets[i] == 0:
+                    curr = prediction_packets[i]
 
-            for pred in prediction_packets:
-                if pred == 0:
-                    sum_outlayers += 1
-                elif pred == 1:
-                    sum_inlayers += 1
-            if sum_outlayers > sum_inlayers:
-                self.ddos_traffic_count += 1
-                return "DDOS Attacked Detected!"
+                    if (i - 1) == -1:
+                        prev = None
+                    else:
+                        prev = prediction_packets[i - 1]
+                    if (i + 1) == len(prediction_packets):
+                        nxt = None
+                    else:
+                        nxt = prediction_packets[i + 1]
+                    if prev != None and nxt != None:
+                        if prev == curr and nxt == curr:
+                            alert += 1
+                            #print("ALERT: ", alert)
+                else:
+                    alert = 0
 
-
-            elif sum_outlayers == sum_inlayers:
-                return "Warning! 50% chance of attack will happen"
-
-            else:
-                self.normal_traffic_count += 1
-                return "No Incoming Attack Detected"
-
+            percentage_alert = (alert / totalAlert) * 100
+            print("PERCENTAGE PACKETS: ", percentage_alert)
+            self.packets_percentage.append(percentage_alert)
+            print(self.packets_percentage)
         except ValueError:
             print("Input incorrect parameters...")
 
@@ -202,6 +120,7 @@ class AnomalyDetectionSimulator(object):
 if __name__ == '__main__':
     app = AnomalyDetectionSimulator(duration=60) # duration in seconds
     #app.gether_datasets(filename="normal")
-    normal_traffic_cnt, ddos_traffic_cnt = app.capture()
-    print("Normal Traffic Count Detected: {0}".format(normal_traffic_cnt))
-    print("DDOS Traffic Count Detected: {0}".format(ddos_traffic_cnt))
+    packets_arrays = app.capture()
+    print("50-100% -> MEANS DDOS")
+    print("0-50% -> MEANS NORMAL")
+    print(packets_arrays)
