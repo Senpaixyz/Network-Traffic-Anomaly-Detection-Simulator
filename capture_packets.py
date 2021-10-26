@@ -68,7 +68,7 @@ class AnomalyDetectionSimulator(object):
             self.ctr += 1
             self.seconds_pass += 1
             time.sleep(self.sleep_sec)
-            #os.system('cls')
+            os.system('cls')
         return self.packets_percentage
     def has_activity(self, pkt):
         if len(pkt) > 0:
