@@ -12,6 +12,8 @@ from scapy.layers.inet import IP, TCP, UDP
 from scapy.sendrecv import sniff
 from scapy.utils import wrpcap
 from library.FlowRecoder import get_data, gen_json
+import numpy as np
+from sys import platform
 
 class AnomalyDetectionSimulator(object):
 
@@ -32,10 +34,11 @@ class AnomalyDetectionSimulator(object):
         self.knn_model = self.load_model()
         self.captured_buffer = []
         self.packets_percentage = []
+        self.packets_percentage_bytes = []
     def load_model(self):
         model = None
         try:
-            model = load('model/clf.joblib')
+            model = load('model/knn.joblib')
             return model
         except FileNotFoundError:
             print("Model File not Found!")
@@ -64,21 +67,31 @@ class AnomalyDetectionSimulator(object):
                 #print("DATA: ", data)
                 print("CHECKIING PACKETS... ")
                 self.prediction(data)
+                self.predictByBytes(data)
                 self.ctr = 0
             self.ctr += 1
             self.seconds_pass += 1
             time.sleep(self.sleep_sec)
-            os.system('cls')
-        return self.packets_percentage
-    def has_activity(self, pkt):
-        if len(pkt) > 0:
-            return True
-        else:
-            return False
+            if platform == "win32":
+                os.system('cls')
+        return self.packets_percentage, self.packets_percentage_bytes
+
+    def predictByBytes(self, packets_array):
+        data = packets_array
+        try:
+            unique = np.unique(data)
+            anomaly = ""
+            start_capture_time = datetime.now()
+            if len(unique) == 1:
+                anomaly = "Yes"
+            else:
+                anomaly = "No"
+            self.packets_percentage_bytes.append(anomaly)
+        except ValueError as e:
+            print("Array values contains I dunno.... :) ")
     def prediction(self,packets_array):
         """ Anomaly from the previous packets flows """
         data = packets_array
-        start_capture_time = datetime.now()
         try:
             prediction_packets = self.knn_model.predict(data)
             print("PREDICTION: ", prediction_packets)
@@ -119,8 +132,11 @@ class AnomalyDetectionSimulator(object):
 
 if __name__ == '__main__':
     app = AnomalyDetectionSimulator(duration=60) # duration in seconds
-    #app.gether_datasets(filename="normal")
-    packets_arrays = app.capture()
+    packets_arrays,packets_bytes = app.capture()
     print("50-100% -> MEANS DDOS")
     print("0-50% -> MEANS NORMAL")
     print(packets_arrays)
+    print("-----------------Anomaly Status-------------------")
+    print("DDOS -> Yes")
+    print("Normal -> No")
+    print(packets_bytes)
