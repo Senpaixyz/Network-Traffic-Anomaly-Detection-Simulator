@@ -35,6 +35,8 @@ class AnomalyDetectionSimulator(object):
         self.captured_buffer = []
         self.packets_percentage = []
         self.packets_percentage_bytes = []
+        self.arrayBytesInstances = 0
+        self.anomalyBytes = 0
     def load_model(self):
         model = None
         try:
@@ -61,34 +63,35 @@ class AnomalyDetectionSimulator(object):
                 self.captured_buffer.append(pkt)
             data = get_data(self.captured_buffer)
             data = gen_json(data)
-
+            print(data)
+            self.predictByBytes(data)
             #print("JSON: ", data)
             if self.ctr == self.check_packets_interval:
                 #print("DATA: ", data)
-                print("CHECKIING PACKETS... ")
+                print("CHECKING BYTES")
+                perc = (self.anomalyBytes / self.arrayBytesInstances) * 100
+                self.packets_percentage_bytes.append(perc)
+                print("CHECKING PACKETS... ")
                 self.prediction(data)
-                self.predictByBytes(data)
                 self.ctr = 0
             self.ctr += 1
             self.seconds_pass += 1
             time.sleep(self.sleep_sec)
-            if platform == "win32":
-                os.system('cls')
+            #if platform == "win32":
+            #    os.system('cls')
         return self.packets_percentage, self.packets_percentage_bytes
 
     def predictByBytes(self, packets_array):
         data = packets_array
         try:
             unique = np.unique(data)
-            anomaly = ""
-            start_capture_time = datetime.now()
+            #start_capture_time = datetime.now()
             if len(unique) == 1:
-                anomaly = "Yes"
-            else:
-                anomaly = "No"
-            self.packets_percentage_bytes.append(anomaly)
+                self.anomalyBytes += 1
+            self.arrayBytesInstances += 1
         except ValueError as e:
             print("Array values contains I dunno.... :) ")
+
     def prediction(self,packets_array):
         """ Anomaly from the previous packets flows """
         data = packets_array
@@ -135,8 +138,7 @@ if __name__ == '__main__':
     packets_arrays,packets_bytes = app.capture()
     print("50-100% -> MEANS DDOS")
     print("0-50% -> MEANS NORMAL")
+    print("-----------------1st way-------------------")
     print(packets_arrays)
-    print("-----------------Anomaly Status-------------------")
-    print("DDOS -> Yes")
-    print("Normal -> No")
+    print("-----------------2nd way-------------------")
     print(packets_bytes)
