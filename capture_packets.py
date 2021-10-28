@@ -38,7 +38,7 @@ class AnomalyDetectionSimulator(object):
     def load_model(self):
         model = None
         try:
-            model = load('model/knn.joblib')
+            model = load('model/knn-data.joblib')
             return model
         except FileNotFoundError:
             print("Model File not Found!")
