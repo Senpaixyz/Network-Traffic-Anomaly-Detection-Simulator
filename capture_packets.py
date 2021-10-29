@@ -60,7 +60,7 @@ class AnomalyDetectionSimulator(object):
             print(str(self.c_stime[0])+":"+str(self.c_stime[1]))
             message = ""
             self.captured_buffer = [] # Add mo to
-            for pkt in sniff(iface=conf.iface, count=30): # set mo sa 20
+            for pkt in sniff(iface=conf.iface, count=40): # set mo sa 20
                 self.captured_buffer.append(pkt)
             data = get_data(self.captured_buffer)
             data = gen_json(data)
