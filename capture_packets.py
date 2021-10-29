@@ -59,11 +59,11 @@ class AnomalyDetectionSimulator(object):
             self.c_stime = ((self.seconds_pass//60)+10, self.seconds_pass%60)
             print(str(self.c_stime[0])+":"+str(self.c_stime[1]))
             message = ""
-            for pkt in sniff(iface=conf.iface, count=20):
+            self.captured_buffer = [] # Add mo to
+            for pkt in sniff(iface=conf.iface, count=30): # set mo sa 20
                 self.captured_buffer.append(pkt)
             data = get_data(self.captured_buffer)
             data = gen_json(data)
-            print(data)
             self.predictByBytes(data)
             #print("JSON: ", data)
             if self.ctr == self.check_packets_interval:
@@ -84,11 +84,13 @@ class AnomalyDetectionSimulator(object):
     def predictByBytes(self, packets_array):
         data = packets_array
         try:
-            unique = np.unique(data)
-            #start_capture_time = datetime.now()
-            if len(unique) == 1:
+            unique = np.unique(data,axis=0)
+            print("DATA: ", data)
+            print("UNIQUE: ", unique)
+            if len(unique) <= 2 and len(data) > 2:
                 self.anomalyBytes += 1
             self.arrayBytesInstances += 1
+            print("LENGTH: ", len(unique), " TOTAL: ", self.arrayBytesInstances) # Hereeee
         except ValueError as e:
             print("Array values contains I dunno.... :) ")
 
