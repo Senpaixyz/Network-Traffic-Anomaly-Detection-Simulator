@@ -59,21 +59,26 @@ class AnomalyDetectionSimulator(object):
             self.c_stime = ((self.seconds_pass//60)+10, self.seconds_pass%60)
             print(str(self.c_stime[0])+":"+str(self.c_stime[1]))
             message = ""
-            self.captured_buffer = [] # Add mo to
-            for pkt in sniff(iface=conf.iface, count=40): # set mo sa 20
+            for pkt in sniff(iface=conf.iface, count=40):
                 self.captured_buffer.append(pkt)
             data = get_data(self.captured_buffer)
             data = gen_json(data)
-            self.predictByBytes(data)
-            #print("JSON: ", data)
+            if len(data) > 20:
+                self.predictByBytes(data)
+                self.captured_buffer = []
             if self.ctr == self.check_packets_interval:
-                #print("DATA: ", data)
                 print("CHECKING BYTES")
-                perc = (self.anomalyBytes / self.arrayBytesInstances) * 100
-                self.packets_percentage_bytes.append(perc)
-                print("CHECKING PACKETS... ")
-                self.prediction(data)
-                self.ctr = 0
+                try:
+                    perc = (self.anomalyBytes / self.arrayBytesInstances) * 100
+                    self.anomalyBytes = 0
+                    self.arrayBytesInstances = 0
+                    self.packets_percentage_bytes.append(perc)
+                    #self.prediction(data)
+                    self.ctr = 0
+                except ZeroDivisionError as e:
+                    print("Theres no current packet transmission...")
+                    self.anomalyBytes = 0
+                    self.arrayBytesInstances = 0
             self.ctr += 1
             self.seconds_pass += 1
             time.sleep(self.sleep_sec)
@@ -84,13 +89,13 @@ class AnomalyDetectionSimulator(object):
     def predictByBytes(self, packets_array):
         data = packets_array
         try:
-            unique = np.unique(data,axis=0)
+            unique = np.unique(data, axis=0)
             print("DATA: ", data)
             print("UNIQUE: ", unique)
-            if len(unique) <= 2 and len(data) > 2:
+            if len(unique) <= 2:
                 self.anomalyBytes += 1
             self.arrayBytesInstances += 1
-            print("LENGTH: ", len(unique), " TOTAL: ", self.arrayBytesInstances) # Hereeee
+            print("UNIQUE LENGTH: ", self.anomalyBytes, " TOTAL LENGTH: ", self.arrayBytesInstances)
         except ValueError as e:
             print("Array values contains I dunno.... :) ")
 

@@ -61,7 +61,7 @@ def get_flows(flows, protocol):
             each_packet.append(6)
         each_packet.append(flow.sport)
         each_packet.append(flow.dport)
-        each_packet.append(flow.proto)
+
         each_packet.append(round(flow.push_flag_ratio(),2))
         each_packet.append(round(flow.avrg_len(),2))
         each_packet.append(round(flow.avrg_payload_len(),2))
@@ -72,6 +72,7 @@ def get_flows(flows, protocol):
         elif protocol == 'udp':
             each_packet.append(1)
         packets_data.append(each_packet)"""
+        each_packet.append(flow.proto)
         packets_data.append(each_packet)
     return packets_data
 def gen_json(flows):
